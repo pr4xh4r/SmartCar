@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SmartCar Control Panel</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0a0f;color:#e0e0e0;overflow-x:hidden;min-height:100vh;user-select:none;-webkit-user-select:none}
+        .app{max-width:480px;margin:0 auto;padding:12px}
+
+        .header{display:flex;align-items:center;justify-content:space-between;padding:8px 0;margin-bottom:8px}
+        .header h1{font-size:1.5rem;font-weight:800;background:linear-gradient(135deg,#00d4ff,#7b2ff7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .conn-status{display:flex;align-items:center;gap:6px;font-size:.7rem;font-weight:600;letter-spacing:1px}
+        .status-dot{width:12px;height:12px;border-radius:50%;background:#ff3b3b;transition:all .3s}
+        .status-dot.connected{background:#00e676;box-shadow:0 0 10px #00e676}
+
+        .cam-container{position:relative;width:100%;aspect-ratio:4/3;border-radius:14px;overflow:hidden;background:#111;border:2px solid #1a1a2e}
+        .cam-container canvas{width:100%;height:100%;display:block}
+        .cam-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.75);font-size:.85rem;color:#888;letter-spacing:2px;transition:opacity .3s;flex-direction:column;gap:8px}
+        .cam-overlay.hidden{opacity:0;pointer-events:none}
+        .cam-overlay .sub{font-size:.6rem;color:#555;letter-spacing:1px}
+
+        .status-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;margin:8px 0;background:#111119;border-radius:10px;font-size:.8rem;font-weight:600;letter-spacing:1px}
+        #modeLabel{color:#00d4ff}
+        #detectionLabel{color:#ffc107}
+
+        .mode-selector{display:flex;gap:6px;margin-bottom:14px}
+        .mode-btn{flex:1;padding:11px 4px;border:2px solid #1a1a2e;border-radius:10px;background:#111119;color:#888;font-size:.7rem;font-weight:700;text-transform:uppercase;cursor:pointer;transition:all .2s;letter-spacing:.5px}
+        .mode-btn.active{border-color:#7b2ff7;color:#fff;background:linear-gradient(135deg,#1a1a2e,#2d1b69);box-shadow:0 0 15px rgba(123,47,247,.3)}
+        .mode-btn:active{transform:scale(.95)}
+
+        .controls{display:flex;justify-content:center;margin:18px 0}
+        .dpad{display:grid;grid-template-areas:". up ." "left center right" ". down .";grid-template-columns:repeat(3,72px);grid-template-rows:repeat(3,72px);gap:6px}
+        .dpad-btn{border:2px solid #1a1a2e;border-radius:14px;background:#111119;color:#e0e0e0;font-size:1.5rem;cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center}
+        .dpad-btn:active,.dpad-btn.pressed{background:#7b2ff7;border-color:#9b5ff7;transform:scale(.9);box-shadow:0 0 15px rgba(123,47,247,.4)}
+        .dpad-btn.up{grid-area:up}.dpad-btn.down{grid-area:down}.dpad-btn.left{grid-area:left}.dpad-btn.right{grid-area:right}
+        .dpad-btn.center{grid-area:center;background:#1c0a0a;border-color:#ff3b3b33;color:#ff3b3b;font-size:1.1rem}
+        .dpad-btn.center:active,.dpad-btn.center.pressed{background:#ff3b3b;color:#fff;box-shadow:0 0 15px rgba(255,59,59,.4)}
+
+        .slider-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#111119;border-radius:10px;margin-bottom:10px}
+        .slider-row label{font-size:.8rem;font-weight:600;color:#888;min-width:44px}
+        .slider-row input[type=range]{flex:1;accent-color:#7b2ff7;height:6px}
+        #speedVal{font-size:.85rem;font-weight:700;color:#00d4ff;min-width:36px;text-align:right}
+
+        .toggle-row{display:flex;gap:8px}
+        .toggle-btn{flex:1;padding:13px 4px;border:2px solid #1a1a2e;border-radius:10px;background:#111119;color:#888;font-size:.7rem;font-weight:700;text-transform:uppercase;cursor:pointer;transition:all .2s;letter-spacing:.5px}
+        .toggle-btn.on{border-color:#fff;color:#fff;background:#1a1a2e;box-shadow:0 0 12px rgba(255,255,255,.3)}
+        .toggle-btn.honk{background:#1a1200;border-color:#ffc10733;color:#ffc107}
+        .toggle-btn.honk:active{background:#ffc107;color:#000;transform:scale(.95)}
+
+        .controls.disabled .dpad-btn{opacity:.25;pointer-events:none}
+
+        .debug{padding:8px 14px;margin-top:12px;background:#111119;border-radius:10px;font-size:.65rem;color:#555;font-family:"SF Mono",Monaco,Consolas,monospace}
+        .footer{text-align:center;padding:16px 0 8px;font-size:.55rem;color:#333;letter-spacing:1px}
+
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+        .status-bar.parking #modeLabel{animation:pulse 1s infinite;color:#ffc107}
+        .status-bar.parked #modeLabel{color:#00e676}
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1>SmartCar</h1>
+            <div class="conn-status">
+                <span id="connLabel">OFFLINE</span>
+                <div class="status-dot" id="connStatus"></div>
+            </div>
+        </div>
+
+        <div class="cam-container">
+            <canvas id="camCanvas" width="320" height="240"></canvas>
+            <div class="cam-overlay" id="camOverlay">
+                CONNECTING TO CAR...
+                <span class="sub">via cloud relay</span>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar">
+            <span id="modeLabel">MANUAL</span>
+            <span id="detectionLabel"></span>
+        </div>
+
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="manual">Manual</button>
+            <button class="mode-btn" data-mode="line_follow">Line</button>
+            <button class="mode-btn" data-mode="traffic">Traffic</button>
+            <button class="mode-btn" data-mode="autopilot">Auto</button>
+            <button class="mode-btn" data-mode="smart_park">Park</button>
+            <button class="mode-btn" data-mode="convoy">Follow</button>
+        </div>
+
+        <div class="controls" id="manualControls">
+            <div class="dpad">
+                <button class="dpad-btn up" data-action="forward">&#9650;</button>
+                <button class="dpad-btn left" data-action="left">&#9664;</button>
+                <button class="dpad-btn center" data-action="stop">&#9632;</button>
+                <button class="dpad-btn right" data-action="right">&#9654;</button>
+                <button class="dpad-btn down" data-action="backward">&#9660;</button>
+            </div>
+        </div>
+
+        <div class="slider-row">
+            <label>Speed</label>
+            <input type="range" id="speedSlider" min="0" max="100" value="60">
+            <span id="speedVal">60%</span>
+        </div>
+
+        <div class="toggle-row">
+            <button class="toggle-btn on" id="ledToggle">LED Light</button>
+            <button class="toggle-btn honk" id="honkBtn">Honk</button>
+        </div>
+
+        <div class="debug" id="debugLog">Connecting...</div>
+        <div class="footer">SMARTCAR CLOUD CONTROL v2.0</div>
+    </div>
+
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script>
+        // ── MQTT Config ──
+        var BROKER = "wss://broker.emqx.io:8084/mqtt";
+        var PREFIX = "smartcar2027";
+        var T_CMD = PREFIX + "/cmd";
+        var T_SPEED = PREFIX + "/speed";
+        var T_MODE = PREFIX + "/mode";
+        var T_LED = PREFIX + "/led";
+        var T_BUZZER = PREFIX + "/buzzer";
+        var T_CAM = PREFIX + "/cam";
+        var T_STATUS = PREFIX + "/status";
+
+        // ── Elements ──
+        var debugEl = document.getElementById("debugLog");
+        var connStatus = document.getElementById("connStatus");
+        var connLabel = document.getElementById("connLabel");
+        var camOverlay = document.getElementById("camOverlay");
+        var camCanvas = document.getElementById("camCanvas");
+        var camCtx = camCanvas.getContext("2d");
+        var modeLabel = document.getElementById("modeLabel");
+        var detectionLabel = document.getElementById("detectionLabel");
+        var statusBar = document.getElementById("statusBar");
+        var manualControls = document.getElementById("manualControls");
+        var speedSlider = document.getElementById("speedSlider");
+        var speedVal = document.getElementById("speedVal");
+        var ledBtn = document.getElementById("ledToggle");
+        var honkBtn = document.getElementById("honkBtn");
+        var currentMode = "manual";
+        var carOnline = false;
+        var mqttConnected = false;
+        var canvasReady = false;
+
+        function log(msg) {
+            console.log("[SmartCar]", msg);
+            debugEl.textContent = msg;
+        }
+
+        function pub(topic, payload) {
+            if (mqttConnected) client.publish(topic, payload);
+        }
+
+        // ── Connect to MQTT broker ──
+        log("Connecting to cloud...");
+        var clientId = "smartcar_web_" + Math.random().toString(36).substr(2, 8);
+        var client = mqtt.connect(BROKER, {
+            clientId: clientId,
+            clean: true,
+            reconnectPeriod: 3000
+        });
+
+        client.on("connect", function() {
+            mqttConnected = true;
+            log("Cloud connected! Waiting for car...");
+            connLabel.textContent = "CLOUD OK";
+            client.subscribe(T_CAM);
+            client.subscribe(T_STATUS);
+        });
+
+        client.on("error", function(err) {
+            log("Cloud error: " + err.message);
+        });
+
+        client.on("offline", function() {
+            mqttConnected = false;
+            log("Cloud offline — reconnecting...");
+            connStatus.classList.remove("connected");
+            connLabel.textContent = "OFFLINE";
+        });
+
+        client.on("reconnect", function() {
+            log("Reconnecting to cloud...");
+            connLabel.textContent = "RECONNECTING";
+        });
+
+        // ── Receive messages ──
+        client.on("message", function(topic, message) {
+            if (topic === T_CAM) {
+                var blob = new Blob([message], {type: "image/jpeg"});
+                var url = URL.createObjectURL(blob);
+                var img = new Image();
+                img.onload = function() {
+                    if (!canvasReady) {
+                        camCanvas.width = camCanvas.clientWidth || 320;
+                        camCanvas.height = camCanvas.clientHeight || 240;
+                        canvasReady = true;
+                    }
+                    camCtx.drawImage(img, 0, 0, camCanvas.width, camCanvas.height);
+                    URL.revokeObjectURL(url);
+                    if (!carOnline) {
+                        carOnline = true;
+                        connStatus.classList.add("connected");
+                        connLabel.textContent = "LIVE";
+                        camOverlay.classList.add("hidden");
+                        log("Car is live!");
+                    }
+                };
+                img.onerror = function() { URL.revokeObjectURL(url); };
+                img.src = url;
+            }
+
+            if (topic === T_STATUS) {
+                try {
+                    var data = JSON.parse(message.toString());
+
+                    if (data.online === true) {
+                        carOnline = true;
+                        connStatus.classList.add("connected");
+                        connLabel.textContent = "LIVE";
+                        camOverlay.classList.add("hidden");
+                        log("Car connected!");
+                    }
+                    if (data.online === false) {
+                        carOnline = false;
+                        connStatus.classList.remove("connected");
+                        connLabel.textContent = "CAR OFF";
+                        camOverlay.classList.remove("hidden");
+                        camOverlay.innerHTML = "CAR OFFLINE<span class='sub'>Start cloud.py on Pi</span>";
+                        log("Car disconnected");
+                    }
+                    if (data.mode) {
+                        currentMode = data.mode;
+                        modeLabel.textContent = data.mode.replace(/_/g, " ").toUpperCase();
+                        updateControlState();
+                    }
+                    if (data.led !== undefined) {
+                        if (data.led) ledBtn.classList.add("on");
+                        else ledBtn.classList.remove("on");
+                    }
+
+                    statusBar.className = "status-bar";
+                    var det = "";
+                    if (data.traffic_color && data.traffic_color !== "none") {
+                        det = data.traffic_color.toUpperCase();
+                        if (data.confidence) det += " (" + Math.round(data.confidence * 100) + "%)";
+                    }
+                    if (data.line_detected !== undefined) {
+                        det += det ? " | " : "";
+                        det += data.line_detected ? "LINE OK" : "NO LINE";
+                    }
+                    if (data.park_phase) {
+                        det = data.park_phase.toUpperCase();
+                        if (data.park_phase === "parked") statusBar.classList.add("parked");
+                        else if (data.park_phase !== "failed") statusBar.classList.add("parking");
+                    }
+                    if (det) detectionLabel.textContent = det;
+                } catch(e) {}
+            }
+        });
+
+        // ── Motor control ──
+        function sendControl(action) {
+            log(">> " + action.toUpperCase());
+            pub(T_CMD, action);
+        }
+
+        function updateControlState() {
+            if (currentMode === "manual") manualControls.classList.remove("disabled");
+            else manualControls.classList.add("disabled");
+        }
+
+        // ── D-Pad (touch + mouse + touchcancel) ──
+        var dpadBtns = document.querySelectorAll(".dpad-btn");
+        for (var i = 0; i < dpadBtns.length; i++) {
+            (function(btn) {
+                var action = btn.getAttribute("data-action");
+                var isTouching = false;
+
+                btn.addEventListener("touchstart", function(e) {
+                    e.preventDefault();
+                    isTouching = true;
+                    btn.classList.add("pressed");
+                    sendControl(action);
+                }, {passive: false});
+
+                btn.addEventListener("touchend", function(e) {
+                    e.preventDefault();
+                    isTouching = false;
+                    btn.classList.remove("pressed");
+                    if (action !== "stop") sendControl("stop");
+                }, {passive: false});
+
+                btn.addEventListener("touchcancel", function(e) {
+                    e.preventDefault();
+                    isTouching = false;
+                    btn.classList.remove("pressed");
+                    if (action !== "stop") sendControl("stop");
+                }, {passive: false});
+
+                btn.addEventListener("mousedown", function(e) {
+                    if (isTouching) return;
+                    e.preventDefault();
+                    btn.classList.add("pressed");
+                    sendControl(action);
+                });
+
+                btn.addEventListener("mouseup", function(e) {
+                    if (isTouching) return;
+                    e.preventDefault();
+                    btn.classList.remove("pressed");
+                    if (action !== "stop") sendControl("stop");
+                });
+
+                btn.addEventListener("mouseleave", function() {
+                    if (isTouching) return;
+                    if (btn.classList.contains("pressed")) {
+                        btn.classList.remove("pressed");
+                        if (action !== "stop") sendControl("stop");
+                    }
+                });
+            })(dpadBtns[i]);
+        }
+
+        // ── Mode buttons ──
+        var modeBtns = document.querySelectorAll(".mode-btn");
+        for (var i = 0; i < modeBtns.length; i++) {
+            (function(btn) {
+                btn.addEventListener("click", function() {
+                    for (var j = 0; j < modeBtns.length; j++) modeBtns[j].classList.remove("active");
+                    btn.classList.add("active");
+                    var mode = btn.getAttribute("data-mode");
+                    log("Mode: " + mode.toUpperCase());
+                    pub(T_MODE, mode);
+                });
+            })(modeBtns[i]);
+        }
+
+        // ── Speed ──
+        speedSlider.addEventListener("input", function() {
+            speedVal.textContent = speedSlider.value + "%";
+            pub(T_SPEED, speedSlider.value);
+        });
+
+        // ── LED toggle ──
+        ledBtn.addEventListener("click", function(e) {
+            e.preventDefault();
+            ledBtn.classList.toggle("on");
+            var state = ledBtn.classList.contains("on");
+            log("LED: " + (state ? "ON" : "OFF"));
+            pub(T_LED, JSON.stringify({state: state}));
+        });
+
+        // ── Honk (prevent double fire on mobile) ──
+        var honkTouched = false;
+        honkBtn.addEventListener("touchstart", function(e) {
+            e.preventDefault();
+            honkTouched = true;
+            log("HONK!");
+            pub(T_BUZZER, "1");
+            setTimeout(function() { honkTouched = false; }, 300);
+        }, {passive: false});
+        honkBtn.addEventListener("click", function(e) {
+            if (honkTouched) return;
+            log("HONK!");
+            pub(T_BUZZER, "1");
+        });
+
+        // ── Keyboard (WASD + Arrows) ──
+        var keyMap = {ArrowUp:"forward",w:"forward",W:"forward",ArrowDown:"backward",s:"backward",S:"backward",ArrowLeft:"left",a:"left",A:"left",ArrowRight:"right",d:"right",D:"right"," ":"stop"};
+        var keysDown = {};
+        document.addEventListener("keydown", function(e) {
+            var action = keyMap[e.key];
+            if (action && !keysDown[e.key]) {
+                keysDown[e.key] = true;
+                sendControl(action);
+            }
+        });
+        document.addEventListener("keyup", function(e) {
+            if (keyMap[e.key]) {
+                delete keysDown[e.key];
+                if (Object.keys(keysDown).length === 0) sendControl("stop");
+            }
+        });
+
+        // ── Handle window resize for canvas ──
+        window.addEventListener("resize", function() { canvasReady = false; });
+    </script>
+</body>
+</html>

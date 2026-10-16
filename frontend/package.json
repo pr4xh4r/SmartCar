@@ -1,0 +1,8 @@
+{
+  "name": "smartcar-control",
+  "version": "1.0.0",
+  "description": "SmartCar Remote Control Panel",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}

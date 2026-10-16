@@ -1,0 +1,29 @@
+# ── Secrets (NEVER commit .env) ──
+.env
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env/
+
+# ── Logs (created at runtime by session_log.py) ──
+logs/
+*.log
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ── Local tooling (personal IDE permissions) ──
+.claude/
+
+# ── Camera test captures ──
+/tmp/
+*.tmp
