@@ -45,8 +45,6 @@ SmartCar/
 │   ├── start_bot.sh     # legacy: telegram_bot.py only
 │   └── start_cloud.sh   # legacy: cloud.py only
 └── docs/
-    ├── presentations/   # project slides
-    ├── reports/         # project reports + docx generator
     └── images/          # sample camera captures
 ```
 
@@ -107,8 +105,6 @@ python main.py
 
 ## Docs
 
-- Slides: `docs/presentations/`
-- Reports: `docs/reports/` (`generate_docx.py` rebuilds the DOCX)
 - Sample frames: `docs/images/`
 
 ## Security
